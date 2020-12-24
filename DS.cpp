@@ -273,7 +273,7 @@ namespace DS{
 
     int RBT::pop_front(){
         int ret=this->front();
-        _begin=erase(_begin);
+        erase(_begin++);
         return ret;
     }
 
@@ -292,7 +292,7 @@ namespace DS{
         return ret;
     }
 
-    RBT_iter RBT::insert(RBT_iter iter,int elem){//没有管begin和end！！！！！！！
+    RBT_iter RBT::insert(RBT_iter iter,int elem){
         node* now;
         node* lc=new node;
         node* rc=new node;
@@ -315,6 +315,9 @@ namespace DS{
                 while(!now->isNIL()){//一路向右
                     now=now->rchild;
                 }
+            }
+            if(iter==_begin){
+                _begin.write_pointer(now);
             }
             now->color=RED;
             now->lchild=lc;
@@ -372,7 +375,8 @@ namespace DS{
             do{
                 temp->num--;
             }while(temp=temp->father);
-            if(_end==ne) _end.write_pointer(ne->rchild);
+            if(_end.get_pointer()==ne) _end.write_pointer(ne->rchild);
+            if(_begin.get_pointer()->father==ne) _begin.write_pointer(ne);
             return iter;
         }
     }
@@ -593,13 +597,14 @@ namespace DS{
 
 int main(){
     DS::RBT rbt;
-    for(int i=0;i<100;i++){
-    rbt.push_back(i);
+    rbt.push_back(1);
+    rbt.push_back(2);
+    for(int i=0;i<5;i++)
+    rbt.insert(rbt.begin(),i);
+    for(int i=0;i<7;i++){
+        p(rbt[i]);
     }
-    for(int i=0;i<50;i++)
-    rbt.pop_back();
-    for(int i=0;i<50;i++)
-    p(rbt[i]);
+
 }
 //修改insert、debug erase
 
