@@ -13,3 +13,4 @@ push_back、push_front、insert均可
 
 
 reference：https://www.jb51.net/article/84833.htm
+https://zhuanlan.zhihu.com/p/25402654

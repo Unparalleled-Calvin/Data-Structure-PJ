@@ -268,7 +268,7 @@ namespace DS{
     }
     
     void RBT::push_front(int elem){
-        _begin=insert(_begin,elem);
+        insert(_begin,elem);
     }
 
     int RBT::pop_front(){
@@ -304,14 +304,13 @@ namespace DS{
             lc->father=rc->father=now;
             _begin=root=RBT_iter(now);
             _end=RBT_iter(rc);
-            iter.write_pointer(now);
         }
         else{//你只管插入，调整的事交给polish
-            if((*iter).isNIL()){
+            if(iter.get_pointer()->isNIL()){
                 now=iter.get_pointer();
             }
             else{
-                now=(*iter).lchild;
+                now=iter.get_pointer()->lchild;
                 while(!now->isNIL()){//一路向右
                     now=now->rchild;
                 }
@@ -331,8 +330,7 @@ namespace DS{
             (temp->num)++;
         }while(temp=temp->father);//调完结构之后再调数目
         _size++;
-        if(_begin==iter)
-            iter.write_pointer(now);
+        iter.write_pointer(now);
         return iter;
     }
 
@@ -454,70 +452,63 @@ namespace DS{
     }
 
     void RBT::epolish(node* ne,node* avoid){
-        if(ne->father==nullptr){
+        if(ne->father==nullptr){//情况一，n是新的根
             ne->color=BLACK;
         }
         else if(ne->father->lchild==ne){//该结点是左孩子
             node* brother=ne->father->rchild;
-            if(brother->lchild->isNIL()&&brother->rchild->isNIL()){//兄弟结点两个孩子为空
-                brother->color=RED;
-                int tempcolor=ne->father->color;
+            if(ne->father->color==RED&&brother->lchild->color==BLACK&&brother->rchild->color==BLACK){//情况二，父节点为红，兄弟结点两孩子为黑
                 ne->father->color=BLACK;
-                if(tempcolor==BLACK){
-                    epolish(ne->father,ne->father);
-                }
+                brother->color=RED;
             }
-            else if((!brother->lchild->isNIL())&&(!brother->lchild->isNIL())){//兄弟结点两孩子均不为空
-                if(brother->color==RED){//兄弟为红色
-                    brother->color=BLACK;
-                    brother->lchild->color=RED;
-                    leftro(brother->father,nullptr);
-                }
-                else{
-                    std::swap(brother->color,brother->father->color);
-                    leftro(brother->father,nullptr);
-                }
+            else if(ne->father->color==BLACK&&brother->color==BLACK&&brother->lchild->color==BLACK&&brother->rchild->color==BLACK){//情况六，需要递归删除
+                brother->color=RED;
+                epolish(ne->father,nullptr);
             }
-            else{
-                if(!brother->lchild->isNIL()){//兄弟结点左孩子不为空
+            else if(brother->color==BLACK){//兄弟结点为黑色，此时必定下面有一红
+                if(brother->lchild->color==RED){//情况四，兄弟结点左孩子为红色
                     brother->color=RED;
                     brother->lchild->color=BLACK;
                     rightro(brother,nullptr);
                     brother=brother->father;
                 }
-                brother->rchild->color=BLACK;
+                brother->rchild->color=BLACK;//情况三，兄弟结点右孩子为红
                 std::swap(brother->color,brother->father->color);
                 leftro(brother->father,nullptr);//不知道该不该是nullptr再看
             }
+            else{//情况五，兄弟结点为红
+                brother->color=BLACK;
+                brother->father->color=RED;
+                leftro(brother->father,nullptr);//操作使ne有一个红爸爸和一个黑兄弟，可以对其重新调整
+                epolish(ne,nullptr);
+            }            
         }
         else{//该结点是右孩子
             node* brother=ne->father->lchild;
-            if(brother->lchild->isNIL()&&brother->rchild->isNIL()){//兄弟结点两个孩子为空
-                brother->color=RED;
+            if(ne->father->color==RED&&brother->lchild->color==BLACK&&brother->rchild->color==BLACK){//情况二，父节点为红，兄弟结点两孩子为黑
                 ne->father->color=BLACK;
-                epolish(ne->father,ne->father);//需要有这个吗？？？？
+                brother->color=RED;
             }
-            else if((!brother->lchild->isNIL())&&(!brother->lchild->isNIL())){//兄弟结点两孩子均不为空
-                if(brother->color==RED){//兄弟为红色
-                    brother->color=BLACK;
-                    brother->lchild->color=RED;
-                    rightro(brother->father,nullptr);
-                }
-                else{
-                    std::swap(brother->color,brother->father->color);
-                    rightro(brother->father,nullptr);
-                }
+            else if(ne->father->color==BLACK&&brother->color==BLACK&&brother->lchild->color==BLACK&&brother->rchild->color==BLACK){//情况六，需要递归删除
+                brother->color=RED;
+                epolish(ne->father,nullptr);
             }
-            else{
-                if(!brother->rchild->isNIL()){//兄弟结点左孩子不为空
+            else if(brother->color==BLACK){//兄弟结点为黑色，此时必定下面有一红
+                if(brother->rchild->color==RED){//情况四，兄弟结点左孩子为红色
                     brother->color=RED;
                     brother->rchild->color=BLACK;
                     leftro(brother,nullptr);
                     brother=brother->father;
                 }
-                brother->lchild->color=BLACK;
+                brother->lchild->color=BLACK;//情况三，兄弟结点右孩子为红
                 std::swap(brother->color,brother->father->color);
-                rightro(brother->father,nullptr);//不知道该不该是nullptr再看
+                leftro(brother->father,nullptr);//不知道该不该是nullptr再看
+            }
+            else{//情况五，兄弟结点为红
+                brother->color=BLACK;
+                brother->father->color=RED;
+                rightro(brother->father,nullptr);//操作使ne有一个红爸爸和一个黑兄弟，可以对其重新调整
+                epolish(ne,nullptr);
             }
         }
     }
@@ -600,18 +591,18 @@ namespace DS{
 
 int main(){
     DS::RBT rbt;
-    for(int i=0;i<8;i++)
+    for(int i=0;i<50;i++)
         rbt.push_back(i);
-    // for(int i=50;i<100;i++)
-    //     rbt.push_front(i);
-    // __p(rbt.root.get_pointer()->lchild->color,rbt.root.get_pointer()->lchild->lchild->val,rbt.root.get_pointer()->lchild->rchild->val);
-    for(int i=0;i<8;i++){
-        p(rbt.pop_front());//还是pop_front有问题
+    for(int i=50;i<100;i++)
+        rbt.push_front(i);
+    for(int i=0;i<20;i++)
+        rbt.pop_front();
+    for(int i=0;i<20;i++){
+        rbt.pop_back();
     }
-    // for(int i=0;i<20;i++)
-    //     rbt.pop_back();
-    // for(int i=0;i<60;i++)
-    //     p(rbt[i]);
+    for(int i=0;i<60;i++){
+        p(rbt[i]);
+    }
 }
 //修改insert、debug erase
 
