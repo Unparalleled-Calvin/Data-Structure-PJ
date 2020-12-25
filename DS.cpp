@@ -273,7 +273,7 @@ namespace DS{
 
     int RBT::pop_front(){
         int ret=this->front();
-        erase(_begin++);
+        erase(_begin==root?_begin:_begin++);
         return ret;
     }
 
@@ -461,8 +461,11 @@ namespace DS{
             node* brother=ne->father->rchild;
             if(brother->lchild->isNIL()&&brother->rchild->isNIL()){//兄弟结点两个孩子为空
                 brother->color=RED;
+                int tempcolor=ne->father->color;
                 ne->father->color=BLACK;
-                epolish(ne->father,ne->father);//需要有这个吗？？？？
+                if(tempcolor==BLACK){
+                    epolish(ne->father,ne->father);
+                }
             }
             else if((!brother->lchild->isNIL())&&(!brother->lchild->isNIL())){//兄弟结点两孩子均不为空
                 if(brother->color==RED){//兄弟为红色
@@ -597,14 +600,18 @@ namespace DS{
 
 int main(){
     DS::RBT rbt;
-    rbt.push_back(1);
-    rbt.push_back(2);
-    for(int i=0;i<5;i++)
-    rbt.insert(rbt.begin(),i);
-    for(int i=0;i<7;i++){
-        p(rbt[i]);
+    for(int i=0;i<8;i++)
+        rbt.push_back(i);
+    // for(int i=50;i<100;i++)
+    //     rbt.push_front(i);
+    // __p(rbt.root.get_pointer()->lchild->color,rbt.root.get_pointer()->lchild->lchild->val,rbt.root.get_pointer()->lchild->rchild->val);
+    for(int i=0;i<8;i++){
+        p(rbt.pop_front());//还是pop_front有问题
     }
-
+    // for(int i=0;i<20;i++)
+    //     rbt.pop_back();
+    // for(int i=0;i<60;i++)
+    //     p(rbt[i]);
 }
 //修改insert、debug erase
 
