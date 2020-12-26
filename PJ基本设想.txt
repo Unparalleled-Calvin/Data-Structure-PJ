@@ -10,3 +10,6 @@ clear()
 任务完成情况：
 reference：https://www.jb51.net/article/84833.htm
 https://zhuanlan.zhihu.com/p/25402654
+
+红色是0
+黑色是1

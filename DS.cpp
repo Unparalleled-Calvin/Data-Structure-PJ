@@ -1,12 +1,14 @@
 #include<iostream>
 #include<ctime>
 #include<cstdlib>
+#include<vector>
 #include<queue>
 #define RBT LinearTable
 #define p(i) std::cout<<i<<std::endl;
 #define _p(i,j) std::cout<<i<<" "<<j<<std::endl;
 #define __p(i,j,k) std::cout<<i<<" "<<j<<" "<<k<<std::endl;
 namespace DS{
+
     //红黑树结点
     class node{
         public:
@@ -23,7 +25,7 @@ namespace DS{
             const node& operator=(const node& ne);
 
             //以下是属性
-            unsigned num=0;//统计下面结点的个数，不用id，用num，大小自己体现在寻找合适插入位置的过程中
+            unsigned num=0;//统计子树结点个数
             int val;
             node* father=nullptr;
             node* lchild=nullptr;
@@ -70,31 +72,31 @@ namespace DS{
 
             int front();
             void push_front(int elem);
-            int pop_front();
+            void pop_front();
             
             int back();
             void push_back(int elem);
-            int pop_back();
+            void pop_back();
 
-            size_t size();
+            unsigned int size();
             bool empty();
 
             int& operator[](unsigned index);
 
-            void swap(RBT_iter iterA, RBT_iter iterB);//交换元素
             void swap(int indexA,int indexB);
             void swap(RBT& nrbt);
+            void refresh(RBT_iter& nroot,RBT_iter& nbegin,RBT_iter& nend,unsigned int& nsize);
 
             void clear();
 
             RBT_iter begin();
             RBT_iter end();
+            RBT_iter root();
             RBT_iter insert(RBT_iter iter,int elem);//在某迭代器的位置插入
             RBT_iter erase(RBT_iter iter);//删除迭代器指向的元素
 
-            void swap_refresh(RBT_iter& nroot,RBT_iter& nbegin,RBT_iter& nend);
         private:
-            RBT_iter root;
+            RBT_iter _root;
             RBT_iter _begin;
             RBT_iter _end;
 
@@ -103,14 +105,15 @@ namespace DS{
             const int RED=0;
             const int BLACK=1;
 
-            void ipolish(node* ne,node* avoid);//insert_polish
+            void ipolish(node* ne,node* avoid=nullptr);//insert_polish
             void epolish(node* ne);//erase_polish
-            void leftro(node* ne,node* avoid);//左旋操作
-            void rightro(node* ne,node* avoid);//右旋操作
-            void countnum(node* ne,node* avoid);
-
-            void destroynode(node* ne,node* father);
+            void leftro(node* ne,node* avoid=nullptr);//左旋操作
+            void rightro(node* ne,node* avoid=nullptr);//右旋操作
+            void countnum(node* ne,node* avoid=nullptr);
+            void destroynode(node* ne,node* father=nullptr);
     };
+    
+    void swap(RBT_iter& iterA, RBT_iter& iterB);
 }
 
 //以下是node类的具体实现
@@ -128,19 +131,19 @@ namespace DS{
         color=ne.color;
     }
 
-    bool node::operator<(const node& ne){//用val的值来比较
+    bool node::operator<(const node& ne){
         return val<ne.val;
     }
 
-    bool node::operator>(const node& ne){//用val的值来比较
+    bool node::operator>(const node& ne){
         return val>ne.val;
     }
 
-    bool node::operator==(const node& ne){//用val的值来比较
+    bool node::operator==(const node& ne){
         return val==ne.val;
     }
 
-    bool node::operator!=(const node& ne){//用val的值来比较
+    bool node::operator!=(const node& ne){
         return val!=ne.val;
     }
 
@@ -252,12 +255,13 @@ namespace DS{
 namespace DS{
     RBT::RBT(){
         _size=0U;
-        _end=_begin=root=RBT_iter(new node);
+        _end=_begin=_root=RBT_iter(new node);
     }
 
     RBT::~RBT(){
         if(_size)
-            destroynode(root.get_pointer());
+            destroynode(_root.get_pointer());
+        delete _root.get_pointer();
     }
 
     RBT_iter RBT::begin(){
@@ -268,8 +272,12 @@ namespace DS{
         return _end;
     }
 
+    RBT_iter RBT::root(){
+        return _root;
+    }
+
     int RBT::front(){
-        if(_size==0U) throw "Empty container!\n";
+        if(_size==0U) std::cerr<<"Empty container!"<<std::endl;
         return _begin.get_pointer()->val;
     }
     
@@ -277,14 +285,13 @@ namespace DS{
         insert(_begin,elem);
     }
 
-    int RBT::pop_front(){
-        int ret=this->front();
-        erase(_begin==root?_begin:_begin++);
-        return ret;
+    void RBT::pop_front(){
+        if(_size)
+            erase(_begin==_root?_begin:_begin++);
     }
 
     int RBT::back(){
-        if(_size==0) throw "Empty container!\n";
+        if(_size==0) std::cerr<<"Empty container!"<<std::endl;
         return _end.get_pointer()->father->val;
     }
 
@@ -292,10 +299,9 @@ namespace DS{
         _end.write_pointer(insert(_end,elem).get_pointer()->rchild);
     }
 
-    int RBT::pop_back(){
-        int ret=this->back();
-        erase(--_end);
-        return ret;
+    void RBT::pop_back(){
+        if(_size)
+            erase(--_end);
     }
 
     RBT_iter RBT::insert(RBT_iter iter,int elem){
@@ -303,12 +309,12 @@ namespace DS{
         node* lc=new node;
         node* rc=new node;
         if(_size==0U){//仅为根节点
-            now=root.get_pointer();
+            now=_root.get_pointer();
             now->lchild=lc;
             now->rchild=rc;
             now->val=elem;
             lc->father=rc->father=now;
-            _begin=root=RBT_iter(now);
+            _begin=_root=RBT_iter(now);
             _end=RBT_iter(rc);
         }
         else{//你只管插入，调整的事交给polish
@@ -323,6 +329,9 @@ namespace DS{
             }
             if(iter==_begin){
                 _begin.write_pointer(now);
+            }
+            if(iter==_end){
+                _end.write_pointer(rc);
             }
             now->color=RED;
             now->lchild=lc;
@@ -342,6 +351,7 @@ namespace DS{
 
     RBT_iter RBT::erase(RBT_iter iter){
         if(_size==0U) return _begin;
+        _size--;
         node* ne=iter.get_pointer();
         if(ne->lchild->isNIL()&&ne->rchild->isNIL()){//左右结点都为NIL
             if(ne->color==RED){//该结点若为红色，直接删除
@@ -508,7 +518,7 @@ namespace DS{
                 }
                 brother->lchild->color=BLACK;//情况三，兄弟结点右孩子为红
                 std::swap(brother->color,brother->father->color);
-                leftro(brother->father);//不知道该不该是nullptr再看
+                rightro(brother->father);//不知道该不该是nullptr再看
             }
             else{//情况五，兄弟结点为红
                 brother->color=BLACK;
@@ -519,7 +529,7 @@ namespace DS{
         }
     }
 
-    void RBT::leftro(node* ne,node* avoid=nullptr){//左旋
+    void RBT::leftro(node* ne,node* avoid){//左旋
         node* rc=ne->rchild;
         node* tempfather=ne->father;
         if(tempfather)//排除根节点的情况
@@ -528,7 +538,7 @@ namespace DS{
             else
                 tempfather->rchild=rc;
         else
-            root.write_pointer(rc);
+            _root.write_pointer(rc);
         rc->father=tempfather;
         node* rclc=rc->lchild;
         rc->lchild=ne;
@@ -539,7 +549,7 @@ namespace DS{
         countnum(rc,avoid);
     }
 
-    void RBT::rightro(node* ne,node* avoid=nullptr){//右旋
+    void RBT::rightro(node* ne,node* avoid){//右旋
         node* lc=ne->lchild;
         node* tempfather=ne->father;
         if(tempfather)//排除根节点的情况
@@ -548,7 +558,7 @@ namespace DS{
             else
                 tempfather->rchild=lc;
         else
-            root.write_pointer(lc);
+            _root.write_pointer(lc);
         lc->father=tempfather;
         node* lcrc=lc->rchild;
         lc->rchild=ne;
@@ -564,7 +574,7 @@ namespace DS{
             ne->num=ne->lchild->num+ne->rchild->num+(ne!=avoid);
     }
 
-    void RBT::destroynode(node* ne,node* father=nullptr){//递归删除一整颗子树
+    void RBT::destroynode(node* ne,node* father){//递归删除一整颗子树
         if(ne->lchild) destroynode(ne->lchild);
         if(ne->rchild) destroynode(ne->rchild);
         if(ne->father!=father) delete ne;//否则
@@ -581,12 +591,9 @@ namespace DS{
     int& RBT::operator[](unsigned index){//index=0考虑了没有？
         index++;
         unsigned temp=0;
-        node* ne=root.get_pointer();
+        node* ne=_root.get_pointer();
         if(_size&&index<=ne->num&&index>=1)
             while(true){
-                // p("debug");
-                // printf("%p\n",ne->lchild);
-                // __p(temp,ne->val,ne->lchild->num);
                 if(index>temp+ne->lchild->num){
                     if(index==temp+ne->lchild->num+1) return ne->val;
                     else{
@@ -599,17 +606,13 @@ namespace DS{
                 }
             }
         std::cerr<<"domain error\n";
-        exit(1); 
+        exit(1);
     }
 
     void RBT::clear(){
         if(_size)
-            destroynode(root.get_pointer());
+            destroynode(_root.get_pointer());
         _size=0;
-    }
-
-    void RBT::swap(RBT_iter iterA, RBT_iter iterB){
-        std::swap(*iterA,*iterB);
     }
 
     void RBT::swap(int indexA,int indexB){
@@ -618,14 +621,22 @@ namespace DS{
     }
 
     void RBT::swap(RBT& nrbt){
-        RBT_iter temp=nrbt.begin();
-        nrbt.swap_refresh(root,_begin,_end);
+        nrbt.refresh(_root,_begin,_end,_size);
     }
 
-    void RBT::swap_refresh(RBT_iter& nroot,RBT_iter& nbegin,RBT_iter& nend){
-        DS::swap(root,nroot);
+    void RBT::refresh(RBT_iter& nroot,RBT_iter& nbegin,RBT_iter& nend,unsigned int& nsize){
+        DS::swap(nroot,_root);
         DS::swap(nbegin,_begin);
         DS::swap(nend,_end);
+        std::swap(nsize,_size);
+    }
+
+    unsigned int RBT::size(){
+        return _size;
+    }
+
+    bool RBT::empty(){
+        return !_size;
     }
 }
 
@@ -639,19 +650,12 @@ namespace DS{
 }
 
 int main(){
-    DS::RBT rbt;
-    for(int i=0;i<50;i++)
-        rbt.push_back(i);
-    for(int i=50;i<100;i++)
+    DS::RBT rbt,rbt1;
+    for(int i=0;i<1000;i++)
         rbt.push_front(i);
-    for(int i=0;i<20;i++)
-        rbt.pop_front();
-    for(int i=0;i<20;i++){
-        rbt.pop_back();
-    }
-    for(int i=0;i<60;i++){
-        p(rbt[i]);
+    for(int i=0;i<50000;i++){
+        rbt.push_back(i);
     }
 }
-//修改insert、debug erase
+
 
