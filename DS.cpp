@@ -3,6 +3,7 @@
 #include<cstdlib>
 #include<vector>
 #include<queue>
+#include<set>
 #define RBT LinearTable
 #define p(i) std::cout<<i<<std::endl;
 #define _p(i,j) std::cout<<i<<" "<<j<<std::endl;
@@ -296,7 +297,7 @@ namespace DS{
     }
 
     void RBT::push_back(int elem){
-        _end.write_pointer(insert(_end,elem).get_pointer()->rchild);
+        insert(_end,elem);
     }
 
     void RBT::pop_back(){
@@ -318,6 +319,7 @@ namespace DS{
             _end=RBT_iter(rc);
         }
         else{//你只管插入，调整的事交给polish
+            // p(iter.get_pointer()->father->val);
             if(iter.get_pointer()->isNIL()){
                 now=iter.get_pointer();
             }
@@ -351,7 +353,6 @@ namespace DS{
 
     RBT_iter RBT::erase(RBT_iter iter){
         if(_size==0U) return _begin;
-        _size--;
         node* ne=iter.get_pointer();
         if(ne->lchild->isNIL()&&ne->rchild->isNIL()){//左右结点都为NIL
             if(ne->color==RED){//该结点若为红色，直接删除
@@ -369,6 +370,7 @@ namespace DS{
             do{
                 temp->num--;
             }while(temp=temp->father);//erase结点时先不动num，左右旋转照常计数，最后一起自底向上更新一遍。
+            _size--;
             return RBT_iter(ne->father);
         }
         else if((!ne->lchild->isNIL())&&(!ne->rchild->isNIL())){//两子女均不为空结点
@@ -376,21 +378,24 @@ namespace DS{
             ++n_iter;
             node* _ne=n_iter.get_pointer();
             std::swap(ne->val,_ne->val);//交换该结点与下一结点，重新调用erase函数
-            erase(n_iter);
+            erase(n_iter);//
             return iter;//还指向它，与它无关
         }
-        else{//有一个子女非空
+        else{//有一个子女非空这个子女必为红色
             node* temp;
             temp=ne->lchild->isNIL()?ne->rchild:ne->lchild;
             ne->val=temp->val;
+            if(_end.get_pointer()==ne) _end.write_pointer(ne->rchild);//这个是为了应对pop_back先将end--的情况
+            else if(_end.get_pointer()==ne->rchild->rchild) _end.write_pointer(ne->rchild);//正常删除涉及_end的情况
+            if(_begin.get_pointer()->father==ne) _begin.write_pointer(ne);//这个是为了应对pop_front先将front--的情况
+            else if(_begin.get_pointer()==ne->lchild) _begin.write_pointer(ne);//正常涉及_front的情况
             delete temp->lchild;
             delete temp->rchild;
             temp->NIL();
             do{
                 temp->num--;
-            }while(temp=temp->father);
-            if(_end.get_pointer()==ne) _end.write_pointer(ne->rchild);
-            if(_begin.get_pointer()->father==ne) _begin.write_pointer(ne);
+            }while(temp=temp->father);//顺序不对，在delete之前就应该处理好
+            _size--;
             return iter;
         }
     }
@@ -588,7 +593,7 @@ namespace DS{
         }
     }
 
-    int& RBT::operator[](unsigned index){//index=0考虑了没有？
+    int& RBT::operator[](unsigned index){//随机访问
         index++;
         unsigned temp=0;
         node* ne=_root.get_pointer();
@@ -648,14 +653,3 @@ namespace DS{
         iterB.write_pointer(temp);
     }
 }
-
-int main(){
-    DS::RBT rbt,rbt1;
-    for(int i=0;i<1000;i++)
-        rbt.push_front(i);
-    for(int i=0;i<50000;i++){
-        rbt.push_back(i);
-    }
-}
-
-
