@@ -19,12 +19,6 @@ namespace DS{
             bool isNIL();//是否为NIL结点
             void NIL();//将其设为NIL结点
 
-            bool operator<(const node& ne);
-            bool operator>(const node& ne);
-            bool operator==(const node& ne);
-            bool operator!=(const node& ne);
-            const node& operator=(const node& ne);
-
             //以下是属性
             unsigned num=0;//统计子树结点个数
             int val;
@@ -124,31 +118,6 @@ namespace DS{
     }
 
     node::node(const node& ne){//复制构造函数和属性有关，改属性一定要改这个！
-        num=ne.num;
-        val=ne.val;
-        father=ne.father;
-        lchild=ne.lchild;
-        rchild=ne.rchild;
-        color=ne.color;
-    }
-
-    bool node::operator<(const node& ne){
-        return val<ne.val;
-    }
-
-    bool node::operator>(const node& ne){
-        return val>ne.val;
-    }
-
-    bool node::operator==(const node& ne){
-        return val==ne.val;
-    }
-
-    bool node::operator!=(const node& ne){
-        return val!=ne.val;
-    }
-
-    const node& node::operator=(const node& ne){
         num=ne.num;
         val=ne.val;
         father=ne.father;
