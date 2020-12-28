@@ -1,20 +1,24 @@
+//本文件将尝试不使用动态new，而是使用固定new+queue来存储可用的结点
+//这是对DS.cpp的一次全新尝试！
+//node的再存储指针，而是存储索引
 #include<iostream>
 #include<ctime>
 #include<cstdlib>
-#include<vector>
+#include<algorithm>
+#include<cstring>
 #include<queue>
-#include<set>
 #define RBT LinearTable
 #define p(i) std::cout<<i<<std::endl;
 #define _p(i,j) std::cout<<i<<" "<<j<<std::endl;
 #define __p(i,j,k) std::cout<<i<<" "<<j<<" "<<k<<std::endl;
 namespace DS{
-
     //红黑树结点
     class node{
         public:
             node();
             node(const node& ne);
+
+            node& operator=(node& ne);
 
             bool isNIL();//是否为NIL结点
             void NIL();//将其设为NIL结点
@@ -22,9 +26,9 @@ namespace DS{
             //以下是属性
             unsigned num=0;//统计子树结点个数
             int val;
-            node* father=nullptr;
-            node* lchild=nullptr;
-            node* rchild=nullptr;
+            int father=-1;
+            int lchild=-1;
+            int rchild=-1;
             int color;
         private:
             const int RED=0;
@@ -35,7 +39,7 @@ namespace DS{
     class RBT_iter{
         public:
             RBT_iter();
-            RBT_iter(node* ne);
+            RBT_iter(int ne,node* pool);
             RBT_iter(const RBT_iter& n_iter);//拷贝构造函数
 
             int& operator*();
@@ -46,13 +50,16 @@ namespace DS{
             const RBT_iter& operator=(const RBT_iter& n_iter);
             bool operator==(const RBT_iter& n_iter);
 
-            node* get_pointer();
-            const node* get_pointer() const;
-            void write_pointer(node* ne);
+            int get_pointer();
+            const int get_pointer() const;
+            void write_pointer(int ne);
+            node* get_pool();
+            void write_pool(node* _pool);
 
-            friend void swap(RBT_iter iterA, RBT_iter iterB);
+            void swap(RBT_iter& n_iter);
         private:
-            node* pointer;
+            int pointer;
+            node* pool;
     };
 
     //红黑树
@@ -89,23 +96,31 @@ namespace DS{
             RBT_iter root();
             RBT_iter insert(RBT_iter iter,int elem);//在某迭代器的位置插入
             RBT_iter erase(RBT_iter iter);//删除迭代器指向的元素
-
+            
         private:
+        
             RBT_iter _root;
             RBT_iter _begin;
             RBT_iter _end;
 
             size_t _size=0U;
+            size_t capacity=4U;
             
             const int RED=0;
             const int BLACK=1;
 
-            void ipolish(node* ne,node* avoid=nullptr);//insert_polish
-            void epolish(node* ne);//erase_polish
-            void leftro(node* ne,node* avoid=nullptr);//左旋操作
-            void rightro(node* ne,node* avoid=nullptr);//右旋操作
-            void countnum(node* ne,node* avoid=nullptr);
-            void destroynode(node* ne,node* father=nullptr);
+            void ipolish(int ne,int avoid=-1);//insert_polish
+            void epolish(int ne);//erase_polish
+            void leftro(int ne,int avoid=-1);//左旋操作
+            void rightro(int ne,int avoid=-1);//右旋操作
+            void countnum(int ne,int avoid=-1);
+            void destroynode(int ne,int father=-1);
+
+            int alloc();//从内存池中分配空间
+            void revert(int ne);//将空间归还内存池
+
+            std::queue<int> aval;
+            node* pool;
     };
     
     void swap(RBT_iter& iterA, RBT_iter& iterB);
@@ -115,6 +130,7 @@ namespace DS{
 namespace DS{
     node::node(){
         NIL();
+        father=-1;
     }
 
     node::node(const node& ne){//复制构造函数和属性有关，改属性一定要改这个！
@@ -126,98 +142,125 @@ namespace DS{
         color=ne.color;
     }
 
+    node& node::operator=(node& ne){
+        num=ne.num;//统计子树结点个数
+        val=ne.val;
+        father=ne.father;
+        lchild=ne.lchild;
+        rchild=ne.rchild;
+        color=ne.color;
+        return *this;
+    }
+
     void node::NIL(){
         val=0;
-        lchild=rchild=nullptr;
+        lchild=rchild=-1;
         color=BLACK;
     }
 
     bool node::isNIL(){
-        return color&&(lchild==rchild);//只有NIL的左右结点才相等为nullptr
+        return color&&(lchild==rchild);//只有NIL的左右结点相等为-1
     }
 }
 
 //以下是RBT_iterator类的具体实现
 namespace DS{
     RBT_iter::RBT_iter(){
-        pointer=nullptr;
+        pointer=-1;
+        pool=nullptr;
     }
 
-    RBT_iter::RBT_iter(node* ne){
+    RBT_iter::RBT_iter(int ne,node* _pool){
         pointer=ne;
+        pool=_pool;
     }
 
     RBT_iter::RBT_iter(const RBT_iter& n_iter){
         pointer=n_iter.pointer;
+        pool=n_iter.pool;
     }
 
-    node* RBT_iter::get_pointer(){
+    node* RBT_iter::get_pool(){
+        return pool;
+    }
+
+    void RBT_iter::write_pool(node* _pool){
+        pool=_pool;
+    }
+
+    int RBT_iter::get_pointer(){
         return pointer;
     }
 
-    const node* RBT_iter::get_pointer() const {
+    const int RBT_iter::get_pointer() const {
         return pointer;
     }
 
     int& RBT_iter::operator*(){
-        return pointer->val;
+        return pool[pointer].val;
     }
 
     RBT_iter RBT_iter::operator++(){
-        if(pointer->rchild->isNIL()){//如果右孩子是空结点，那么就上去
-            while(pointer->father->rchild==pointer){
-                pointer=pointer->father;
+        if(pool[pool[pointer].rchild].isNIL()){//如果右孩子是空结点，那么就上去
+            while(pool[pool[pointer].father].rchild==pointer){
+                pointer=pool[pointer].father;
             }
-            pointer=pointer->father;
+            pointer=pool[pointer].father;
         }
         else{
-            pointer=pointer->rchild;
-            while(!pointer->lchild->isNIL()){//去右子树的左下角
-                pointer=pointer->lchild;
+            pointer=pool[pointer].rchild;
+            while(!pool[pool[pointer].lchild].isNIL()){//去右子树的左下角
+                pointer=pool[pointer].lchild;
             }
         }
         return *this;
     }
 
     RBT_iter RBT_iter::operator++(int){//后置
-        node* ne=pointer;
+        int ne=pointer;
         ++(*this);
-        return RBT_iter(ne);
+        return RBT_iter(ne,pool);
     }
 
     RBT_iter RBT_iter::operator--(){
-        if(pointer->isNIL()||pointer->lchild->isNIL()){//如果左孩子是空结点，那么就上去
-            while(pointer->father->lchild==pointer){//如果是父节点的左孩子，那就一直往上跳
-                pointer=pointer->father;
+        if(pool[pointer].isNIL()||pool[pool[pointer].lchild].isNIL()){//如果左孩子是空结点，那么就上去
+            while(pool[pool[pointer].father].lchild==pointer){//如果是父节点的左孩子，那就一直往上跳
+                pointer=pool[pointer].father;
             }
-            pointer=pointer->father;
+            pointer=pool[pointer].father;
         }
         else{
-            pointer=pointer->lchild;
-            while(!pointer->rchild->isNIL()){//左子树非空去左子树右下角
-                pointer=pointer->rchild;
+            pointer=pool[pointer].lchild;
+            while(!pool[pool[pointer].rchild].isNIL()){//左子树非空去左子树右下角
+                pointer=pool[pointer].rchild;
             }
         }
         return *this;
     }
 
     RBT_iter RBT_iter::operator--(int){
-        node* ne=pointer;
+        int ne=pointer;
         --(*this);
-        return RBT_iter(ne);
+        return RBT_iter(ne,pool);
     }
 
     const RBT_iter& RBT_iter::operator=(const RBT_iter& n_iter){
         pointer=n_iter.pointer;
+        pool=n_iter.pool;
         return *this;
     }
 
-    void RBT_iter::write_pointer(node* ne){
+    void RBT_iter::write_pointer(int ne){
         pointer=ne;
     }
 
     bool RBT_iter::operator==(const RBT_iter& n_iter){
-        return this->pointer==n_iter.get_pointer();
+        return pointer==n_iter.pointer&&pool==n_iter.pool;
+    }
+
+    void RBT_iter::swap(RBT_iter& n_iter){
+        std::swap(pool,n_iter.pool);
+        std::swap(pointer,n_iter.pointer);
     }
 }
 
@@ -225,13 +268,42 @@ namespace DS{
 namespace DS{
     RBT::RBT(){
         _size=0U;
-        _end=_begin=_root=RBT_iter(new node);
+        pool=new node[capacity];
+        for(int i=0;i<4;i++)
+            aval.push(i);
+        _end=_begin=_root=RBT_iter(alloc(),pool);
     }
 
     RBT::~RBT(){
-        if(_size)
-            destroynode(_root.get_pointer());
-        delete _root.get_pointer();
+        delete[] pool;
+    }
+
+    int RBT::alloc(){//空间分配函数
+        if(aval.empty()){
+            int _capacity=int(capacity*1.5);//1.5倍扩容方式
+            node* _pool=new node[_capacity];
+            // std::copy(pool,pool+capacity,_pool);
+            // memcpy(pool,_pool,capacity);
+            for(int i=0;i<capacity;i++){
+                _pool[i]=pool[i];
+            }
+            delete[] pool;
+            for(int i=capacity;i<_capacity;i++)
+                aval.push(i);
+            pool=_pool;
+            capacity=_capacity;
+            _begin.write_pool(pool);
+            _end.write_pool(pool);
+            _root.write_pool(pool);
+        }
+        int ret=aval.front();
+        aval.pop();
+        return ret;
+    }
+
+    void RBT::revert(int ne){//归还空间
+        pool[ne].NIL();
+        aval.push(ne);
     }
 
     RBT_iter RBT::begin(){
@@ -248,7 +320,7 @@ namespace DS{
 
     int RBT::front(){
         if(_size==0U) std::cerr<<"Empty container!"<<std::endl;
-        return _begin.get_pointer()->val;
+        return pool[_begin.get_pointer()].val;
     }
     
     void RBT::push_front(int elem){
@@ -262,7 +334,7 @@ namespace DS{
 
     int RBT::back(){
         if(_size==0) std::cerr<<"Empty container!"<<std::endl;
-        return _end.get_pointer()->father->val;
+        return pool[pool[_end.get_pointer()].father].val;
     }
 
     void RBT::push_back(int elem){
@@ -275,27 +347,27 @@ namespace DS{
     }
 
     RBT_iter RBT::insert(RBT_iter iter,int elem){
-        node* now;
-        node* lc=new node;
-        node* rc=new node;
+        int now;
+        int lc=alloc();
+        int rc=alloc();
+        iter.write_pool(pool);
         if(_size==0U){//仅为根节点
             now=_root.get_pointer();
-            now->lchild=lc;
-            now->rchild=rc;
-            now->val=elem;
-            lc->father=rc->father=now;
-            _begin=_root=RBT_iter(now);
-            _end=RBT_iter(rc);
+            pool[now].lchild=lc;
+            pool[now].rchild=rc;
+            pool[now].val=elem;
+            pool[lc].father=pool[rc].father=now;
+            _begin=_root=RBT_iter(now,pool);
+            _end=RBT_iter(rc,pool);
         }
         else{//你只管插入，调整的事交给polish
-            // p(iter.get_pointer()->father->val);
-            if(iter.get_pointer()->isNIL()){
+            if(pool[iter.get_pointer()].isNIL()){
                 now=iter.get_pointer();
             }
             else{
-                now=iter.get_pointer()->lchild;
-                while(!now->isNIL()){//一路向右
-                    now=now->rchild;
+                now=pool[iter.get_pointer()].lchild;
+                while(!pool[now].isNIL()){//一路向右
+                    now=pool[now].rchild;
                 }
             }
             if(iter==_begin){
@@ -304,17 +376,17 @@ namespace DS{
             if(iter==_end){
                 _end.write_pointer(rc);
             }
-            now->color=RED;
-            now->lchild=lc;
-            now->rchild=rc;
-            now->val=elem;
-            lc->father=rc->father=now;
+            pool[now].color=RED;
+            pool[now].lchild=lc;
+            pool[now].rchild=rc;
+            pool[now].val=elem;
+            pool[lc].father=pool[rc].father=now;
             ipolish(now,now);
         }
-        node* temp=now;
-        do{//当temp->father==nullptr会停下
-            (temp->num)++;
-        }while(temp=temp->father);//调完结构之后再调数目
+        int temp=now;
+        do{
+            pool[temp].num+=1;
+        }while((temp=pool[temp].father)!=-1);//调完结构之后再调数目
         _size++;
         iter.write_pointer(now);
         return iter;
@@ -322,118 +394,118 @@ namespace DS{
 
     RBT_iter RBT::erase(RBT_iter iter){
         if(_size==0U) return _begin;
-        node* ne=iter.get_pointer();
-        if(ne->lchild->isNIL()&&ne->rchild->isNIL()){//左右结点都为NIL
-            if(ne->color==RED){//该结点若为红色，直接删除
-                delete ne->lchild;
-                delete ne->rchild;
-                ne->NIL();
+        int ne=iter.get_pointer();
+        if(pool[pool[ne].lchild].isNIL()&&pool[pool[ne].rchild].isNIL()){//左右结点都为NIL
+            if(pool[ne].color==RED){//该结点若为红色，直接删除
+                revert(pool[ne].lchild);
+                revert(pool[ne].rchild);
+                pool[ne].NIL();
             }
             else{//该结点为黑色
-                delete ne->lchild;
-                delete ne->rchild;
-                ne->NIL();
+                revert(pool[ne].lchild);
+                revert(pool[ne].rchild);
+                pool[ne].NIL();
                 epolish(ne);
             }
-            node* temp=ne;
+            int temp=ne;
             do{
-                temp->num--;
-            }while(temp=temp->father);//erase结点时先不动num，左右旋转照常计数，最后一起自底向上更新一遍。
+                pool[temp].num-=1;
+            }while((temp=pool[temp].father)!=-1);//erase结点时先不动num，左右旋转照常计数，最后一起自底向上更新一遍。
             _size--;
-            return RBT_iter(ne->father);
+            return RBT_iter(pool[ne].father,pool);
         }
-        else if((!ne->lchild->isNIL())&&(!ne->rchild->isNIL())){//两子女均不为空结点
+        else if((!pool[pool[ne].lchild].isNIL())&&(!pool[pool[ne].rchild].isNIL())){//两子女均不为空结点
             RBT_iter n_iter=iter;
             ++n_iter;
-            node* _ne=n_iter.get_pointer();
-            std::swap(ne->val,_ne->val);//交换该结点与下一结点，重新调用erase函数
+            int _ne=n_iter.get_pointer();
+            std::swap(pool[ne].val,pool[_ne].val);//交换该结点与下一结点，重新调用erase函数
             erase(n_iter);//
             return iter;//还指向它，与它无关
         }
         else{//有一个子女非空这个子女必为红色
-            node* temp;
-            temp=ne->lchild->isNIL()?ne->rchild:ne->lchild;
-            ne->val=temp->val;
-            if(_end.get_pointer()==ne) _end.write_pointer(ne->rchild);//这个是为了应对pop_back先将end--的情况
-            else if(_end.get_pointer()==ne->rchild->rchild) _end.write_pointer(ne->rchild);//正常删除涉及_end的情况
-            if(_begin.get_pointer()->father==ne) _begin.write_pointer(ne);//这个是为了应对pop_front先将front--的情况
-            else if(_begin.get_pointer()==ne->lchild) _begin.write_pointer(ne);//正常涉及_front的情况
-            delete temp->lchild;
-            delete temp->rchild;
-            temp->NIL();
+            int temp;
+            temp=pool[pool[ne].lchild].isNIL()?pool[ne].rchild:pool[ne].lchild;
+            pool[ne].val=pool[temp].val;
+            if(_end.get_pointer()==ne) _end.write_pointer(pool[ne].rchild);//这个是为了应对pop_back先将end--的情况
+            else if(_end.get_pointer()==pool[pool[ne].rchild].rchild) _end.write_pointer(pool[ne].rchild);//正常删除涉及_end的情况
+            if(pool[_begin.get_pointer()].father==ne) _begin.write_pointer(ne);//这个是为了应对pop_front先将front--的情况
+            else if(_begin.get_pointer()==pool[ne].lchild) _begin.write_pointer(ne);//正常涉及_front的情况
+            revert(pool[temp].lchild);
+            revert(pool[temp].rchild);
+            pool[temp].NIL();
             do{
-                temp->num--;
-            }while(temp=temp->father);//顺序不对，在delete之前就应该处理好
+                pool[temp].num-=1;
+            }while((temp=pool[temp].father)!=-1);//顺序不对，在delete之前就应该处理好
             _size--;
             return iter;
         }
     }
 
-    void RBT::ipolish(node* ne,node* avoid){//用于insert的结构调整
-        if(ne->father==nullptr){//要调整的节点为根节点
-            ne->color=BLACK;
+    void RBT::ipolish(int ne,int avoid){//用于insert的结构调整
+        if(pool[ne].father==-1){//要调整的节点为根节点
+            pool[ne].color=BLACK;
         }
-        else if((ne->father)->color==RED){//新节点的父节点为红色
-            node* tempfather=ne->father;
-            node* grandfather=tempfather->father;
-            node* uncle;
-            if(tempfather==grandfather->lchild){//父节点在左边
-                if(ne==tempfather->lchild){//新节点在左边
-                    uncle=grandfather->rchild;
-                    if(uncle->color==BLACK){//叔父节点为黑色
-                        tempfather->color=BLACK;
-                        grandfather->color=RED;
+        else if(pool[pool[ne].father].color==RED){//新节点的父节点为红色
+            int tempfather=pool[ne].father;
+            int grandfather=pool[tempfather].father;
+            int uncle;
+            if(tempfather==pool[grandfather].lchild){//父节点在左边
+                if(ne==pool[tempfather].lchild){//新节点在左边
+                    uncle=pool[grandfather].rchild;
+                    if(pool[uncle].color==BLACK){//叔父节点为黑色
+                        pool[tempfather].color=BLACK;
+                        pool[grandfather].color=RED;
                         rightro(grandfather,avoid);
                     }
                     else{//叔父节点为红色
-                        tempfather->color=BLACK;
-                        uncle->color=BLACK;
-                        grandfather->color=RED;
+                        pool[tempfather].color=BLACK;
+                        pool[uncle].color=BLACK;
+                        pool[grandfather].color=RED;
                         ipolish(grandfather,avoid);
                     }
                 }
                 else{//新节点在右边
-                    uncle=grandfather->rchild;
-                    if(uncle->color==BLACK){//叔父节点为黑色
+                    uncle=pool[grandfather].rchild;
+                    if(pool[uncle].color==BLACK){//叔父节点为黑色
                         leftro(tempfather,avoid);
-                        ne->color=BLACK;
-                        grandfather->color=RED;
+                        pool[ne].color=BLACK;
+                        pool[grandfather].color=RED;
                         rightro(grandfather,avoid);
                     }
                     else{//叔父节点为红色
-                        tempfather->color=BLACK;
-                        uncle->color=BLACK;
-                        grandfather->color=RED;
+                        pool[tempfather].color=BLACK;
+                        pool[uncle].color=BLACK;
+                        pool[grandfather].color=RED;
                         ipolish(grandfather,avoid);
                     }
                 }
             }
             else{//父节点在右边
-                if(ne==tempfather->rchild){//新节点在右边
-                    uncle=grandfather->lchild;
-                    if(uncle->color==BLACK){//叔父节点为黑色
-                        tempfather->color=BLACK;
-                        grandfather->color=RED;
+                if(ne==pool[tempfather].rchild){//新节点在右边
+                    uncle=pool[grandfather].lchild;
+                    if(pool[uncle].color==BLACK){//叔父节点为黑色
+                        pool[tempfather].color=BLACK;
+                        pool[grandfather].color=RED;
                         leftro(grandfather,avoid);
                     }else{//叔父节点为红色
-                        tempfather->color=BLACK;
-                        uncle->color=BLACK;
-                        grandfather->color=RED;
+                        pool[tempfather].color=BLACK;
+                        pool[uncle].color=BLACK;
+                        pool[grandfather].color=RED;
                         ipolish(grandfather,avoid);
                     }
                 }
                 else{//新节点在左边
-                    uncle=grandfather->lchild;
-                    if(uncle->color==BLACK){//叔父节点为黑色
+                    uncle=pool[grandfather].lchild;
+                    if(pool[uncle].color==BLACK){//叔父节点为黑色
                         rightro(tempfather,avoid);
-                        ne->color=BLACK;
-                        grandfather->color=RED;
+                        pool[ne].color=BLACK;
+                        pool[grandfather].color=RED;
                         leftro(grandfather,avoid);
                     }
                     else{//叔父节点为红色
-                        tempfather->color=BLACK;
-                        uncle->color=BLACK;
-                        grandfather->color=RED;
+                        pool[tempfather].color=BLACK;
+                        pool[uncle].color=BLACK;
+                        pool[grandfather].color=RED;
                         ipolish(grandfather,avoid);
                     }
                 }
@@ -441,121 +513,132 @@ namespace DS{
         }
     }
 
-    void RBT::epolish(node* ne){//用于erase的结构调整
-        if(ne->father==nullptr){//情况一，n是新的根
-            ne->color=BLACK;
+    void RBT::epolish(int ne){//用于erase的结构调整
+        if(pool[ne].father==-1){//情况一，n是新的根
+            pool[ne].color=BLACK;
         }
-        else if(ne->father->lchild==ne){//该结点是左孩子
-            node* brother=ne->father->rchild;
-            if(ne->father->color==RED&&brother->lchild->color==BLACK&&brother->rchild->color==BLACK){//情况二，父节点为红，兄弟结点两孩子为黑
-                ne->father->color=BLACK;
-                brother->color=RED;
+        else if(pool[pool[ne].father].lchild==ne){//该结点是左孩子
+            int brother=pool[pool[ne].father].rchild;
+            if(pool[pool[ne].father].color==RED&&pool[pool[brother].lchild].color==BLACK&&pool[pool[brother].rchild].color==BLACK){//情况二，父节点为红，兄弟结点两孩子为黑
+                pool[pool[ne].father].color=BLACK;
+                pool[brother].color=RED;
             }
-            else if(ne->father->color==BLACK&&brother->color==BLACK&&brother->lchild->color==BLACK&&brother->rchild->color==BLACK){//情况六，需要递归删除
-                brother->color=RED;
-                epolish(ne->father);
+            else if(pool[pool[ne].father].color==BLACK&&pool[brother].color==BLACK&&pool[pool[brother].lchild].color==BLACK&&pool[pool[brother].rchild].color==BLACK){//情况六，需要递归删除
+                pool[brother].color=RED;
+                epolish(pool[ne].father);
             }
-            else if(brother->color==BLACK){//兄弟结点为黑色，此时必定下面有一红
-                if(brother->lchild->color==RED){//情况四，兄弟结点左孩子为红色
-                    brother->color=RED;
-                    brother->lchild->color=BLACK;
+            else if(pool[brother].color==BLACK){//兄弟结点为黑色，此时必定下面有一红
+                if(pool[pool[brother].lchild].color==RED){//情况四，兄弟结点左孩子为红色
+                    pool[brother].color=RED;
+                    pool[pool[brother].lchild].color=BLACK;
                     rightro(brother);
-                    brother=brother->father;
+                    brother=pool[brother].father;
                 }
-                brother->rchild->color=BLACK;//情况三，兄弟结点右孩子为红
-                std::swap(brother->color,brother->father->color);
-                leftro(brother->father);//不知道该不该是nullptr再看
+                pool[pool[brother].rchild].color=BLACK;//情况三，兄弟结点右孩子为红
+                std::swap(pool[brother].color,pool[pool[brother].father].color);
+                leftro(pool[brother].father);//不知道该不该是nullptr再看
             }
             else{//情况五，兄弟结点为红
-                brother->color=BLACK;
-                brother->father->color=RED;
-                leftro(brother->father);//操作使ne有一个红爸爸和一个黑兄弟，可以对其重新调整
+                pool[brother].color=BLACK;
+                pool[pool[brother].father].color=RED;
+                leftro(pool[brother].father);//操作使ne有一个红爸爸和一个黑兄弟，可以对其重新调整
                 epolish(ne);
             }            
         }
         else{//该结点是右孩子
-            node* brother=ne->father->lchild;
-            if(ne->father->color==RED&&brother->lchild->color==BLACK&&brother->rchild->color==BLACK){//情况二，父节点为红，兄弟结点两孩子为黑
-                ne->father->color=BLACK;
-                brother->color=RED;
+            int brother=pool[pool[ne].father].lchild;
+            if(pool[pool[ne].father].color==RED&&pool[pool[brother].lchild].color==BLACK&&pool[pool[brother].rchild].color==BLACK){//情况二，父节点为红，兄弟结点两孩子为黑
+                pool[pool[ne].father].color=BLACK;
+                pool[brother].color=RED;
             }
-            else if(ne->father->color==BLACK&&brother->color==BLACK&&brother->lchild->color==BLACK&&brother->rchild->color==BLACK){//情况六，需要递归删除
-                brother->color=RED;
-                epolish(ne->father);
+            else if(pool[pool[ne].father].color==BLACK&&pool[brother].color==BLACK&&pool[pool[brother].lchild].color==BLACK&&pool[pool[brother].rchild].color==BLACK){//情况六，需要递归删除
+                pool[brother].color=RED;
+                epolish(pool[ne].father);
             }
-            else if(brother->color==BLACK){//兄弟结点为黑色，此时必定下面有一红
-                if(brother->rchild->color==RED){//情况四，兄弟结点左孩子为红色
-                    brother->color=RED;
-                    brother->rchild->color=BLACK;
+            else if(pool[brother].color==BLACK){//兄弟结点为黑色，此时必定下面有一红
+                if(pool[pool[brother].rchild].color==RED){//情况四，兄弟结点左孩子为红色
+                    pool[brother].color=RED;
+                    pool[pool[brother].rchild].color=BLACK;
                     leftro(brother);
-                    brother=brother->father;
+                    brother=pool[brother].father;
                 }
-                brother->lchild->color=BLACK;//情况三，兄弟结点右孩子为红
-                std::swap(brother->color,brother->father->color);
-                rightro(brother->father);//不知道该不该是nullptr再看
+                pool[pool[brother].lchild].color=BLACK;//情况三，兄弟结点右孩子为红
+                std::swap(pool[brother].color,pool[pool[brother].father].color);
+                rightro(pool[brother].father);//不知道该不该是nullptr再看
             }
             else{//情况五，兄弟结点为红
-                brother->color=BLACK;
-                brother->father->color=RED;
-                rightro(brother->father);//操作使ne有一个红爸爸和一个黑兄弟，可以对其重新调整
+                pool[brother].color=BLACK;
+                pool[pool[brother].father].color=RED;
+                rightro(pool[brother].father);//操作使ne有一个红爸爸和一个黑兄弟，可以对其重新调整
                 epolish(ne);
             }
         }
     }
 
-    void RBT::leftro(node* ne,node* avoid){//左旋
-        node* rc=ne->rchild;
-        node* tempfather=ne->father;
-        if(tempfather)//排除根节点的情况
-            if(ne==tempfather->lchild)
-                tempfather->lchild=rc;
+    void RBT::leftro(int ne,int avoid){//左旋
+        int rc=pool[ne].rchild;
+        int tempfather=pool[ne].father;
+        if(tempfather!=-1)//排除根节点的情况
+            if(ne==pool[tempfather].lchild)
+                pool[tempfather].lchild=rc;
             else
-                tempfather->rchild=rc;
+                pool[tempfather].rchild=rc;
         else
             _root.write_pointer(rc);
-        rc->father=tempfather;
-        node* rclc=rc->lchild;
-        rc->lchild=ne;
-        ne->father=rc;
-        ne->rchild=rclc;
-        rclc->father=ne;
+        pool[rc].father=tempfather;
+        int rclc=pool[rc].lchild;
+        pool[rc].lchild=ne;
+        pool[ne].father=rc;
+        pool[ne].rchild=rclc;
+        pool[rclc].father=ne;
         countnum(ne,avoid);
         countnum(rc,avoid);
     }
 
-    void RBT::rightro(node* ne,node* avoid){//右旋
-        node* lc=ne->lchild;
-        node* tempfather=ne->father;
-        if(tempfather)//排除根节点的情况
-            if(ne==tempfather->lchild)
-                tempfather->lchild=lc;
+    void RBT::rightro(int ne,int avoid){//右旋
+        int lc=pool[ne].lchild;
+        int tempfather=pool[ne].father;
+        if(tempfather!=-1)//排除根节点的情况
+            if(ne==pool[tempfather].lchild)
+                pool[tempfather].lchild=lc;
             else
-                tempfather->rchild=lc;
+                pool[tempfather].rchild=lc;
         else
             _root.write_pointer(lc);
-        lc->father=tempfather;
-        node* lcrc=lc->rchild;
-        lc->rchild=ne;
-        ne->father=lc;
-        ne->lchild=lcrc;
-        lcrc->father=ne;
+        pool[lc].father=tempfather;
+        int lcrc=pool[lc].rchild;
+        pool[lc].rchild=ne;
+        pool[ne].father=lc;
+        pool[ne].lchild=lcrc;
+        pool[lcrc].father=ne;
         countnum(ne,avoid);
         countnum(lc,avoid);
     }
 
-    void RBT::countnum(node* ne,node* avoid){
-        if(!ne->isNIL())
-            ne->num=ne->lchild->num+ne->rchild->num+(ne!=avoid);
+    void RBT::countnum(int ne,int avoid){
+        if(!pool[ne].isNIL())
+            pool[ne].num=pool[pool[ne].lchild].num+pool[pool[ne].rchild].num+(ne!=avoid);
     }
 
-    void RBT::destroynode(node* ne,node* father){//递归删除一整颗子树
-        if(ne->lchild) destroynode(ne->lchild);
-        if(ne->rchild) destroynode(ne->rchild);
-        if(ne->father!=father) delete ne;//否则
+    void RBT::destroynode(int ne,int father){//递归删除一整颗子树
+        if(father==-1){//说明是clear()
+            delete[] pool;
+            capacity=4;
+            pool=new node[capacity];
+            std::queue<int> empty;
+            aval=empty;
+            for(int i=0;i<capacity;i++)
+                aval.push(i);
+            _root=_begin=_end=RBT_iter(alloc(),pool);//默认将0作为根
+            return;
+        }
+        if(pool[ne].lchild) destroynode(pool[ne].lchild);
+        if(pool[ne].rchild) destroynode(pool[ne].rchild);
+        if(pool[ne].father!=father) revert(ne);//否则
         else{
-            _size-=ne->num;
-            ne->NIL();
-            if(father==nullptr){
+            _size-=pool[ne].num;
+            pool[ne].NIL();
+            if(father==-1){
                 _begin.write_pointer(ne);
                 _end.write_pointer(ne);
             }
@@ -565,18 +648,18 @@ namespace DS{
     int& RBT::operator[](unsigned index){//随机访问
         index++;
         unsigned temp=0;
-        node* ne=_root.get_pointer();
-        if(_size&&index<=ne->num&&index>=1)
+        int ne=_root.get_pointer();
+        if(_size&&index<=pool[ne].num&&index>=1)
             while(true){
-                if(index>temp+ne->lchild->num){
-                    if(index==temp+ne->lchild->num+1) return ne->val;
+                if(index>temp+pool[pool[ne].lchild].num){
+                    if(index==temp+pool[pool[ne].lchild].num+1) return pool[ne].val;
                     else{
-                        temp+=1+ne->lchild->num;
-                        ne=ne->rchild;
+                        temp+=1+pool[pool[ne].lchild].num;
+                        ne=pool[ne].rchild;
                     }
                 }
                 else{
-                    ne=ne->lchild;
+                    ne=pool[ne].lchild;
                 }
             }
         std::cerr<<"domain error\n";
@@ -596,12 +679,16 @@ namespace DS{
 
     void RBT::swap(RBT& nrbt){
         nrbt.refresh(_root,_begin,_end,_size);
+        aval.swap(nrbt.aval);
+        std::swap(pool,nrbt.pool);
+        std::swap(capacity,nrbt.capacity);
+
     }
 
     void RBT::refresh(RBT_iter& nroot,RBT_iter& nbegin,RBT_iter& nend,unsigned int& nsize){
-        DS::swap(nroot,_root);
-        DS::swap(nbegin,_begin);
-        DS::swap(nend,_end);
+        _root.swap(nroot);
+        _begin.swap(nbegin);
+        _end.swap(nend);
         std::swap(nsize,_size);
     }
 
@@ -614,11 +701,62 @@ namespace DS{
     }
 }
 
-//以下是友元函数的具体实现
-namespace DS{
-    void swap(RBT_iter& iterA, RBT_iter& iterB){
-        node* temp=iterA.get_pointer();
-        iterA.write_pointer(iterB.get_pointer());
-        iterB.write_pointer(temp);
-    }
-}
+
+// int main(){
+//     DS::RBT rbt;
+//     int n,op,temp;
+//     std::cin>>n;
+//     for(int i=0;i<n;i++){
+//         std::cin>>op;
+//         switch(op){
+//             case 1:
+//                 std::cin>>temp;
+//                 rbt.push_front(temp);
+//                 break;
+//             case 2:
+//                 std::cin>>temp;
+//                 rbt.push_back(temp);
+//                 break;
+//             case 3:
+//                 rbt.pop_front();
+//                 break;
+//             case 4:
+//                 rbt.pop_back();
+//                 break;
+//             case 5:
+//                 int x,y;
+//                 std::cin>>x>>y;
+//                 if(x<rbt.size()){
+//                     rbt[x]+=y;
+//                 }
+//                 break;
+//             case 6:
+//                 std::cin>>temp;
+//                 if(temp<rbt.size()){
+//                     p(rbt[temp]);
+//                 }
+//                 else{
+//                     p("SegmentationFault");
+//                 }
+//                 break;
+//             case 7:
+//                 if(rbt.empty()){
+//                     p("SegmentationFault");}
+//                 else
+//                     p(rbt[0]);
+//                 break;
+//             case 8:
+//                 if(rbt.empty()){
+//                     p("SegmentationFault");}
+//                 else
+//                     p(rbt[rbt.size()-1]);
+//                 break;
+//             case 9:
+//                 p(rbt.size());
+//                 break;
+//             case 10:
+//                 rbt.clear();
+//                 break;
+//         }
+//     }
+// }
