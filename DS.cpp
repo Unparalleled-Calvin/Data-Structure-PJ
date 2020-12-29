@@ -10,10 +10,6 @@
 #define _p(i,j) std::cout<<i<<" "<<j<<std::endl;
 #define __p(i,j,k) std::cout<<i<<" "<<j<<" "<<k<<std::endl;
 namespace DS{
-    //友元函数
-    RBT_iter operator+(RBT_iter ne,int offset);
-    RBT_iter operator-(RBT_iter ne,int offset);
-
     //红黑树结点
     class node{
         public:
@@ -147,6 +143,10 @@ namespace DS{
             std::queue<int> aval;
             node* pool;
     };
+
+    //友元函数
+    RBT_iter operator+(RBT_iter ne,int offset);
+    RBT_iter operator-(RBT_iter ne,int offset);
 }
 
 //以下是node类的具体实现
@@ -224,7 +224,7 @@ namespace DS{
     }
 
     RBT_iter RBT_iter::operator++(){
-        if(pool[pointer].isNIL()) return;//如果是NIL，也就是一开始的情况，这里考虑一下鲁棒性
+        if(pool[pointer].isNIL()) return *this;//如果是NIL，也就是一开始的情况，这里考虑一下鲁棒性
         if(pool[pool[pointer].rchild].isNIL()){//如果右孩子是空结点，那么就上去
             while(pool[pointer].father!=-1&&pool[pool[pointer].father].rchild==pointer){
                 pointer=pool[pointer].father;
@@ -894,7 +894,6 @@ namespace DS{
         }
     }
 }
-
 // int main(){
 //     DS::RBT rbt;
 //     int n,op,temp;
