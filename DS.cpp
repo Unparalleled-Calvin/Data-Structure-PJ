@@ -1,14 +1,22 @@
-//本文件将尝试不使用动态new，而是使用固定new+queue来存储可用的结点
+//本分支是第3个版本了..
+//版本1和版本2共同的缺点是由于哨兵结点的存在，导致内存有一半是浪费的，
+//版本1的由于多次new、delete，导致时间浪费比较严重。
+//版本2在每个红黑树内维护了一个数组和queue用于存放内存，在扩容时的批量复制和批量压队列都带来了灾难性的时间和空间后果
+//导致当数据量比较大时和版本1时间持平，空间略大，实在是不划算。
+//想到其实根本没必要像vector一样扩容+复制
+//得益于杜宇轩的全局内存池的启发，利用一个全局的对象统一管理所有的rbt的内存，而不需要为每个rbt单独开一个池子（造成浪费）
+//每次开定长的空间，用以减少复制的浪费，使得新开一个空间时，queue的容量不超过那个定长
 #include<iostream>
 #include<ctime>
 #include<cstdlib>
-#include<algorithm>
-#include<cstring>
+#include<vector>
 #include<queue>
 #define RBT LinearTable
 #define p(i) std::cout<<i<<std::endl;
 #define _p(i,j) std::cout<<i<<" "<<j<<std::endl;
 #define __p(i,j,k) std::cout<<i<<" "<<j<<" "<<k<<std::endl;
+#define BLACK 1
+#define RED 0
 namespace DS{
     //红黑树结点
     class node{
@@ -24,20 +32,17 @@ namespace DS{
             //以下是属性
             unsigned num=0;//统计子树结点个数
             int val;
-            int father=-1;
-            int lchild=-1;
-            int rchild=-1;
-            int color;
-        private:
-            const int RED=0;
-            const int BLACK=1;
+            unsigned father=-1;
+            unsigned lchild=-1;
+            unsigned rchild=-1;
+            bool color;
     };
 
     //红黑树迭代器
     class RBT_iter{
         public:
             RBT_iter();
-            RBT_iter(int ne,node* pool);
+            RBT_iter(unsigned ne);
             RBT_iter(const RBT_iter& n_iter);//拷贝构造函数
 
             int& operator*();
@@ -67,25 +72,18 @@ namespace DS{
             int get_pointer();
             const int get_pointer() const;
             void write_pointer(int ne);
-            node* get_pool();
-            void write_pool(node* _pool);
 
             void swap(RBT_iter& n_iter);
 
-            int get_index();
-            int get_index() const;
+            unsigned get_index();
+            unsigned get_index() const;
         private:
-            int pointer;
-            node* pool;
+            unsigned pointer;
     };
 
     //红黑树
     class RBT{
         public:
-            typedef RBT_iter iterator;
-            typedef const RBT_iter const_iterator;
-            typedef unsigned int size_t;
-
             RBT();//构造函数
             RBT(int n,int val);//构造长度为n的线性表
             RBT(const RBT_iter& ib,const RBT_iter& ie);//从begin迭代器到end迭代器
@@ -104,14 +102,13 @@ namespace DS{
             void pop_back();
             void pop_back(int pop_size);
 
-            unsigned int size();
+            unsigned size();
             bool empty();
 
             int& operator[](unsigned index);
 
             void swap(int indexA,int indexB);
             void swap(RBT& nrbt);
-            void refresh(RBT_iter& nroot,RBT_iter& nbegin,RBT_iter& nend,unsigned int& nsize);
 
             void clear();
 
@@ -130,11 +127,6 @@ namespace DS{
             RBT_iter _end;
 
             size_t _size=0U;
-            size_t capacity;
-            const size_t defcapacity=4U;//默认初始空间
-            
-            const int RED=0;
-            const int BLACK=1;
 
             void ipolish(int ne,int avoid=-1);//insert_polish
             void epolish(int ne);//erase_polish
@@ -142,17 +134,26 @@ namespace DS{
             void rightro(int ne,int avoid=-1);//右旋操作
             void countnum(int ne,int avoid=-1);
             void destroynode(int ne,int father=-1);
+    };
 
-            int alloc();//从内存池中分配空间
-            void revert(int ne);//将空间归还内存池
-
-            std::queue<int> aval;
-            node* pool;
+    class POOL{//内存池类
+        public:
+            POOL(int capacity_size=256U);
+            ~POOL();
+            unsigned alloc();
+            void revert(unsigned index);
+            node& operator[](unsigned index);
+        private:
+            std::vector<node*> memory;
+            std::queue<unsigned> aval;
+            unsigned capacity;
     };
 
     //友元函数
     RBT_iter operator+(RBT_iter ne,int offset);
     RBT_iter operator-(RBT_iter ne,int offset);
+
+    POOL pool;
 }
 
 //以下是node类的具体实现
@@ -196,27 +197,16 @@ namespace DS{
 namespace DS{
     RBT_iter::RBT_iter(){
         pointer=-1;
-        pool=nullptr;
     }
 
-    RBT_iter::RBT_iter(int ne,node* _pool){
+    RBT_iter::RBT_iter(unsigned ne){
         pointer=ne;
-        pool=_pool;
     }
 
     RBT_iter::RBT_iter(const RBT_iter& n_iter){
         pointer=n_iter.pointer;
-        pool=n_iter.pool;
     }
-
-    node* RBT_iter::get_pool(){
-        return pool;
-    }
-
-    void RBT_iter::write_pool(node* _pool){
-        pool=_pool;
-    }
-
+    
     int RBT_iter::get_pointer(){
         return pointer;
     }
@@ -255,7 +245,7 @@ namespace DS{
     RBT_iter RBT_iter::operator++(int){//后置
         int ne=pointer;
         ++(*this);
-        return RBT_iter(ne,pool);
+        return RBT_iter(ne);
     }
 
     RBT_iter RBT_iter::operator--(){
@@ -283,12 +273,11 @@ namespace DS{
     RBT_iter RBT_iter::operator--(int){
         int ne=pointer;
         --(*this);
-        return RBT_iter(ne,pool);
+        return RBT_iter(ne);
     }
 
     const RBT_iter& RBT_iter::operator=(const RBT_iter& n_iter){
         pointer=n_iter.pointer;
-        pool=n_iter.pool;
         return *this;
     }
 
@@ -297,11 +286,11 @@ namespace DS{
     }
 
     bool RBT_iter::operator==(const RBT_iter& n_iter){
-        return pointer==n_iter.pointer&&pool==n_iter.pool;
+        return pointer==n_iter.pointer;
     }
 
     bool RBT_iter::operator==(const RBT_iter& n_iter) const{
-        return pointer==n_iter.pointer&&pool==n_iter.pool;
+        return pointer==n_iter.pointer;
     }
 
     bool RBT_iter::operator!=(const RBT_iter& n_iter){
@@ -313,19 +302,19 @@ namespace DS{
     }
 
     bool RBT_iter::operator>=(const RBT_iter& n_iter){
-        return this->get_index()>=n_iter.get_index()&&pool==n_iter.pool;
+        return this->get_index()>=n_iter.get_index();
     }
 
     bool RBT_iter::operator>=(const RBT_iter& n_iter) const{
-        return this->get_index()>=n_iter.get_index()&&pool==n_iter.pool;
+        return this->get_index()>=n_iter.get_index();
     }
 
     bool RBT_iter::operator<=(const RBT_iter& n_iter){
-        return this->get_index()<=n_iter.get_index()&&pool==n_iter.pool;
+        return this->get_index()<=n_iter.get_index();
     }
 
     bool RBT_iter::operator<=(const RBT_iter& n_iter) const{
-        return this->get_index()<=n_iter.get_index()&&pool==n_iter.pool;
+        return this->get_index()<=n_iter.get_index();
     }
 
     bool RBT_iter::operator>(const RBT_iter& n_iter){
@@ -333,7 +322,7 @@ namespace DS{
     }
 
     bool RBT_iter::operator>(const RBT_iter& n_iter) const{
-        RBT_iter temp;
+        RBT_iter temp=*this;
         return temp>n_iter;
     }
 
@@ -342,17 +331,16 @@ namespace DS{
     }
 
     bool RBT_iter::operator<(const RBT_iter& n_iter) const{
-        RBT_iter temp;
+        RBT_iter temp=*this;
         return temp<n_iter;
     }
 
     void RBT_iter::swap(RBT_iter& n_iter){
-        std::swap(pool,n_iter.pool);
         std::swap(pointer,n_iter.pointer);
     }
 
-    int RBT_iter::get_index(){//自下而上logn遍历到n获取索引
-        int fa,temp=pointer,ret;
+    unsigned RBT_iter::get_index(){//自下而上logn遍历到n获取索引
+        unsigned fa,temp=pointer,ret;
         ret=pool[pointer].isNIL()?-1+(pool[pointer].father==-1):pool[pool[pointer].lchild].num;//防止出现size==0的情况
         while((fa=pool[temp].father)!=-1){
             if(temp==pool[fa].rchild){//如果是父节点的右孩子
@@ -363,7 +351,7 @@ namespace DS{
         return ret;
     }
 
-    int RBT_iter::get_index() const{
+    unsigned RBT_iter::get_index() const{
         RBT_iter temp=*this;
         return temp.get_index();
     }
@@ -374,71 +362,35 @@ namespace DS{
 namespace DS{
     RBT::RBT(){
         _size=0U;
-        capacity=defcapacity;
-        pool=new node[capacity];
-        for(int i=0;i<capacity;i++)
-            aval.push(i);
-        _end=_begin=_root=RBT_iter(alloc(),pool);
+        _end=_begin=_root=RBT_iter(pool.alloc());
     }
 
     RBT::RBT(int n,int val){
-        capacity=int(1.5*n);//将容量置为1.5倍n，不直接用alloc扩容
-        pool=new node[capacity];
-        for(int i=0;i<capacity;i++)
-            aval.push(i);
-        _end=_begin=_root=RBT_iter(alloc(),pool);
+        _size=0U;
+        _end=_begin=_root=RBT_iter(pool.alloc());
         for(int i=0;i<n;i++)
             this->push_back(val);//朴素地尾插n个val。
     }
 
     RBT::RBT(const RBT_iter& ib,const RBT_iter& ie){
-        capacity=int(1.5*(ie.get_index()-ib.get_index()));//未实现！！觉得不需要重载这个操作符，没有实际意义，在这里搞一下就行了，以后再搞
-        for(int i=0;i<capacity;i++)
-            aval.push(i);
-        _end=_begin=_root=RBT_iter(alloc(),pool);
+        _size=0U;
+        _end=_begin=_root=RBT_iter(pool.alloc());
         for(RBT_iter temp=ib;!(temp==ie);++temp){
             this->push_back(*temp);
         }
     }
 
     RBT::RBT(int* ab,int* ae){
-        capacity=int(1.5*(ae-ab));
-        for(int i=0;i<capacity;i++)
-            aval.push(i);
-        _end=_begin=_root=RBT_iter(alloc(),pool);
+        _size=0U;
+        _end=_begin=_root=RBT_iter(pool.alloc());
         for(int* temp=ab;temp<ae;temp++){
-            this->push_back(*temp);
+            push_back(*temp);
         }
     }
 
     RBT::~RBT(){
-        delete[] pool;
-    }
-
-    int RBT::alloc(){//空间分配函数
-        if(aval.empty()){
-            int _capacity=int(capacity*1.5);//1.5倍扩容方式
-            node* _pool=new node[_capacity];
-            for(int i=0;i<capacity;i++){
-                _pool[i]=pool[i];
-            }
-            delete[] pool;
-            for(int i=capacity;i<_capacity;i++)
-                aval.push(i);
-            pool=_pool;
-            capacity=_capacity;
-            _begin.write_pool(pool);
-            _end.write_pool(pool);
-            _root.write_pool(pool);
-        }
-        int ret=aval.front();
-        aval.pop();
-        return ret;
-    }
-
-    void RBT::revert(int ne){//归还空间
-        pool[ne].NIL();
-        aval.push(ne);
+        clear();
+        pool.revert(_root.get_pointer());
     }
 
     RBT_iter RBT::begin(){
@@ -505,18 +457,17 @@ namespace DS{
     }
 
     RBT_iter RBT::insert(RBT_iter iter,int val){
-        int now;
-        int lc=alloc();
-        int rc=alloc();
-        iter.write_pool(pool);
+        unsigned now;
+        unsigned lc=pool.alloc();
+        unsigned rc=pool.alloc();
         if(_size==0U){//仅为根节点
             now=_root.get_pointer();
             pool[now].lchild=lc;
             pool[now].rchild=rc;
             pool[now].val=val;
             pool[lc].father=pool[rc].father=now;
-            _begin=_root=RBT_iter(now,pool);
-            _end=RBT_iter(rc,pool);
+            _begin=_root=RBT_iter(now);
+            _end=RBT_iter(rc);
         }
         else{//你只管插入，调整的事交给polish
             if(pool[iter.get_pointer()].isNIL()){
@@ -560,13 +511,13 @@ namespace DS{
         }
         if(pool[pool[ne].lchild].isNIL()&&pool[pool[ne].rchild].isNIL()){//左右结点都为NIL
             if(pool[ne].color==RED){//该结点若为红色，直接删除
-                revert(pool[ne].lchild);
-                revert(pool[ne].rchild);
+                pool.revert(pool[ne].lchild);
+                pool.revert(pool[ne].rchild);
                 pool[ne].NIL();
             }
             else{//该结点为黑色
-                revert(pool[ne].lchild);
-                revert(pool[ne].rchild);
+                pool.revert(pool[ne].lchild);
+                pool.revert(pool[ne].rchild);
                 pool[ne].NIL();
                 epolish(ne);
             }
@@ -575,7 +526,7 @@ namespace DS{
                 pool[temp].num-=1;
             }while((temp=pool[temp].father)!=-1);//erase结点时先不动num，左右旋转照常计数，最后一起自底向上更新一遍。
             _size--;
-            return RBT_iter(pool[ne].father,pool);
+            return RBT_iter(pool[ne].father);
         }
         else if((!pool[pool[ne].lchild].isNIL())&&(!pool[pool[ne].rchild].isNIL())){//两子女均不为空结点
             RBT_iter n_iter=iter;
@@ -593,8 +544,8 @@ namespace DS{
             else if(_end.get_pointer()==pool[pool[ne].rchild].rchild) _end.write_pointer(pool[ne].rchild);//正常删除涉及_end的情况
             if(pool[_begin.get_pointer()].father==ne) _begin.write_pointer(ne);//这个是为了应对pop_front先将front--的情况
             else if(_begin.get_pointer()==pool[ne].lchild) _begin.write_pointer(ne);//正常涉及_front的情况
-            revert(pool[temp].lchild);
-            revert(pool[temp].rchild);
+            pool.revert(pool[temp].lchild);
+            pool.revert(pool[temp].rchild);
             pool[temp].NIL();
             do{
                 pool[temp].num-=1;
@@ -784,20 +735,9 @@ namespace DS{
     }
 
     void RBT::destroynode(int ne,int father){//递归删除一整颗子树
-        if(father==-1){//说明是clear()
-            delete[] pool;
-            capacity=defcapacity;
-            pool=new node[capacity];
-            std::queue<int> empty;
-            aval=empty;
-            for(int i=0;i<capacity;i++)
-                aval.push(i);
-            _root=_begin=_end=RBT_iter(alloc(),pool);//默认将0作为根
-            return;
-        }
-        if(pool[ne].lchild) destroynode(pool[ne].lchild);
-        if(pool[ne].rchild) destroynode(pool[ne].rchild);
-        if(pool[ne].father!=father) revert(ne);//否则
+        if(pool[ne].lchild!=-1) destroynode(pool[ne].lchild);
+        if(pool[ne].rchild!=-1) destroynode(pool[ne].rchild);
+        if(pool[ne].father!=father) pool.revert(ne);//否则
         else{
             _size-=pool[ne].num;
             pool[ne].NIL();
@@ -845,18 +785,10 @@ namespace DS{
     }
 
     void RBT::swap(RBT& nrbt){
-        nrbt.refresh(_root,_begin,_end,_size);
-        aval.swap(nrbt.aval);
-        std::swap(pool,nrbt.pool);
-        std::swap(capacity,nrbt.capacity);
-
-    }
-
-    void RBT::refresh(RBT_iter& nroot,RBT_iter& nbegin,RBT_iter& nend,unsigned int& nsize){
-        _root.swap(nroot);
-        _begin.swap(nbegin);
-        _end.swap(nend);
-        std::swap(nsize,_size);
+        _root.swap(nrbt._root);
+        _begin.swap(nrbt._begin);
+        _end.swap(nrbt._end);
+        std::swap(nrbt._size,_size);
     }
 
     unsigned int RBT::size(){
@@ -868,13 +800,47 @@ namespace DS{
     }
 }
 
+//以下是POOL类的具体实现
+namespace DS{
+    POOL::POOL(int capacity_size){
+        capacity=capacity_size;
+    }
+
+    POOL::~POOL(){
+        int size=memory.size();
+        for(int i=0;i<size;i++)
+            delete[] memory[i];
+    }
+
+    unsigned POOL::alloc(){
+        if(aval.empty()){
+            unsigned temp=capacity*memory.size();
+            for(unsigned i=0;i<capacity;i++){
+                aval.push(i+temp);
+            }
+            memory.push_back(new node[capacity]);
+        }
+        int ret=aval.front();
+        aval.pop();
+        return ret;
+    }
+
+    void POOL::revert(unsigned index){
+        (*this)[index].NIL();
+        aval.push(index);
+    }
+
+    node& POOL::operator[](unsigned index){
+        return memory[index/capacity][index%capacity];
+    }
+}
+
 //以下是友元函数的具体实现
 namespace DS{
     RBT_iter operator+(RBT_iter ne,int offset){
-        int temp=ne.get_pointer();
-        int _index=ne.get_index()+offset+1;
+        unsigned temp=ne.get_pointer();
+        unsigned _index=ne.get_index()+offset+1;
         unsigned temp_sum=0;
-        node* pool=ne.pool;
         if(offset<60){//两种情况，如果所需步数小于60，那么就用朴素实现
             for(int i=0;i<offset;i++)
                 ++ne;
@@ -885,12 +851,12 @@ namespace DS{
         if(_index>pool[temp].num){
             while(pool[temp].rchild!=-1)
                 temp=pool[temp].rchild;//一路向右直到_end的位置
-            return RBT_iter(temp,pool);
+            return RBT_iter(temp);
         }
         else{//否则到那个位置
             while(true){
                 if(_index>temp_sum+pool[pool[temp].lchild].num){
-                    if(_index==temp_sum+pool[pool[temp].lchild].num+1) return RBT_iter(temp,pool);
+                    if(_index==temp_sum+pool[pool[temp].lchild].num+1) return RBT_iter(temp);
                     else{
                         temp_sum+=1+pool[pool[temp].lchild].num;
                         temp_sum=pool[temp].rchild;
@@ -904,10 +870,9 @@ namespace DS{
     }
 
     RBT_iter operator-(RBT_iter ne,int offset){
-        int temp=ne.get_pointer();
-        int _index=ne.get_index()-offset+1;
+        unsigned temp=ne.get_pointer();
+        unsigned _index=ne.get_index()-offset+1;
         unsigned temp_sum=0;
-        node* pool=ne.pool;
         if(offset<60){
             for(int i=0;i<offset;i++)
                 --ne;
@@ -918,12 +883,12 @@ namespace DS{
         if(_index<1){
             while(!pool[pool[temp].lchild].isNIL())
                 temp=pool[temp].rchild;//一路向左至_begin
-            return RBT_iter(temp,pool);
+            return RBT_iter(temp);
         }
         else{//否则到那个位置
             while(true){
                 if(_index>temp_sum+pool[pool[temp].lchild].num){
-                    if(_index==temp_sum+pool[pool[temp].lchild].num+1) return RBT_iter(temp,pool);
+                    if(_index==temp_sum+pool[pool[temp].lchild].num+1) return RBT_iter(temp);
                     else{
                         temp_sum+=1+pool[pool[temp].lchild].num;
                         temp_sum=pool[temp].rchild;
@@ -935,14 +900,6 @@ namespace DS{
             }
         }
     }
-}
-
-int main(){
-    DS::RBT rbt;
-    for(int i=0;i<1e6;i++){
-        rbt.push_back(i);
-    }
-    
 }
 
 // int main(){
