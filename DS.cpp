@@ -795,8 +795,8 @@ namespace DS{
             _root=_begin=_end=RBT_iter(alloc(),pool);//默认将0作为根
             return;
         }
-        if(pool[ne].lchild) destroynode(pool[ne].lchild);
-        if(pool[ne].rchild) destroynode(pool[ne].rchild);
+        if(pool[ne].lchild!=-1) destroynode(pool[ne].lchild);
+        if(pool[ne].rchild!=-1) destroynode(pool[ne].rchild);
         if(pool[ne].father!=father) revert(ne);//否则
         else{
             _size-=pool[ne].num;
