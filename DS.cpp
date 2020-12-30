@@ -67,11 +67,15 @@ namespace DS{
 
             int front();
             void push_front(int elem);
+            void push_front(int num,int elem);
             void pop_front();
+            void pop_front(int pop_size);
             
             int back();
             void push_back(int elem);
+            void push_back(int num,int elem);
             void pop_back();
+            void pop_back(int pop_size);
 
             unsigned int size();
             bool empty();
@@ -255,9 +259,20 @@ namespace DS{
         insert(_begin,elem);
     }
 
+    void RBT::push_front(int num,int elem){
+        for(int i=0;i<num;i++)
+            this->push_front(elem);
+    }
+
     void RBT::pop_front(){
         if(_size)
             erase(_begin==_root?_begin:_begin++);
+    }
+
+    void RBT::pop_front(int pop_size){
+        while(_size&&pop_size--){
+            this->pop_front();
+        }
     }
 
     int RBT::back(){
@@ -269,9 +284,20 @@ namespace DS{
         insert(_end,elem);
     }
 
+    void RBT::push_back(int num,int elem){
+        for(int i=0;i<num;i++)
+            this->push_back(elem);
+    }
+
     void RBT::pop_back(){
         if(_size)
             erase(--_end);
+    }
+
+    void RBT::pop_back(int pop_size){
+        while(_size&&pop_size--){
+            this->pop_back();
+        }
     }
 
     RBT_iter RBT::insert(RBT_iter iter,int elem){
