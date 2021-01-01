@@ -822,6 +822,8 @@ namespace DS{
         }
         int ret=aval.front();
         aval.pop();
+        pool[ret].NIL();
+        pool[ret].num=0;
         return ret;
     }
 
@@ -904,59 +906,80 @@ namespace DS{
 
 // int main(){
 //     DS::RBT rbt;
-//     int n,op,temp;
-//     std::cin>>n;
-//     for(int i=0;i<n;i++){
-//         std::cin>>op;
-//         switch(op){
-//             case 1:
-//                 std::cin>>temp;
-//                 rbt.push_front(temp);
-//                 break;
-//             case 2:
-//                 std::cin>>temp;
-//                 rbt.push_back(temp);
-//                 break;
-//             case 3:
-//                 rbt.pop_front();
-//                 break;
-//             case 4:
-//                 rbt.pop_back();
-//                 break;
-//             case 5:
-//                 int x,y;
-//                 std::cin>>x>>y;
-//                 if(x<rbt.size()){
-//                     rbt[x]+=y;
-//                 }
-//                 break;
-//             case 6:
-//                 std::cin>>temp;
-//                 if(temp<rbt.size()){
-//                     p(rbt[temp]);
-//                 }
-//                 else{
-//                     p("SegmentationFault");
-//                 }
-//                 break;
-//             case 7:
-//                 if(rbt.empty()){
-//                     p("SegmentationFault");}
-//                 else
-//                     p(rbt[0]);
-//                 break;
-//             case 8:
-//                 if(rbt.empty()){
-//                     p("SegmentationFault");}
-//                 else
-//                     p(rbt[rbt.size()-1]);
-//                 break;
-//             case 9:
-//                 p(rbt.size());
-//                 break;
-//             case 10:
-//                 rbt.clear();
-//                 break;
-//         }
+//     for(int i=0;i<100;i++){
+//         rbt.push_back(i);
 //     }
+//     for(int i=0;i<97;i++){
+//         rbt.pop_front();
+//     }
+//     rbt.clear();
+//     for(int i=0;i<100;i++){
+//         rbt.push_back(i);
+//     }
+//     p(rbt[rbt.size()-1]);
 // }
+int cnt=0;
+int main(){
+    DS::RBT rbt;
+    int n,op,temp;
+    std::cin>>n;
+    for(int i=0;i<n;i++){
+        // p(cnt++);
+        std::cin>>op;
+        switch(op){
+            case 1:
+                std::cin>>temp;
+                rbt.push_front(temp);
+                break;
+            case 2:
+                std::cin>>temp;
+                rbt.push_back(temp);
+                break;
+            case 3:
+                rbt.pop_front();
+                break;
+            case 4:
+                rbt.pop_back();
+                break;
+            case 5:
+                int x,y;
+                std::cin>>x>>y;
+                if(x<rbt.size()){
+                    rbt[x]+=y;
+                }
+                break;
+            case 6:
+                std::cin>>temp;
+                if(temp<rbt.size()){
+                    p(rbt[temp]);
+                }
+                else{
+                    p("SegmentationFault");
+                }
+                break;
+            case 7:
+                if(rbt.empty()){
+                    p("SegmentationFault");}
+                else
+                    p(rbt[0]);
+                break;
+            case 8:
+                if(rbt.empty()){
+                    p("SegmentationFault");}
+                else{
+                    p(rbt[rbt.size()-1]);
+                }
+                break;
+            case 9:
+                p(rbt.size());
+                break;
+            case 10:
+                rbt.clear();
+                break;
+        }
+    }
+    // p(rbt.size());
+    // unsigned a=rbt.root().get_pointer();
+    // unsigned b=DS::pool[DS::pool[a].lchild].lchild,c=DS::pool[DS::pool[a].rchild].rchild;
+    // __p(DS::pool[b].num,DS::pool[c].num,DS::pool[c].num);
+}
